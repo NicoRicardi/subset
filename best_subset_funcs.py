@@ -67,40 +67,46 @@ def nearby_points2(arr, thresh):
     return l    
 
 def coalesce(arr, thresh):
+    if type(arr) == list:
+        arr = np.array(arr)
     dist = distN if len(arr.shape) == 2 else dist1
     l = []
-    for n1,p1 in enumerate(arr):
+    weights = np.ones(len(arr))
+    for n1, p1 in enumerate(arr):
         if n1 in l:
             continue
         mx, mn = p1 + thresh, p1 - thresh
         square = np.where(np.logical_and((arr < mx).all(axis=1), (arr > mn).all(axis=1)))[0]
-        l.extend([n2 for n2 in square if dist(p1, arr[n2]) < thresh and n2 not in l and n2 != n1])
-    return [i for i in range(arr.shape[0]) if i not in l] 
+        to_ext = [n2 for n2 in square if dist(p1, arr[n2]) < thresh and n2 not in l and n2 != n1]
+        weights[n1] += sum([weights[i] for i in to_ext])
+        l.extend(to_ext)
+    points = np.delete(np.arange(len(arr)),  l)
+    weights = weights[[i for i in range(len(arr)) if i not in l]]
+    return points, weights
 
 def reduce_to(arr, des_size, t0, t_inc):
     r = arr
     t = t0
     while r.shape[0] > des_size:
-        r = arr[coalesce(arr, t)]
+        tmp, w = coalesce(arr, t)
+        r = arr[tmp]
         t += t_inc
-    return r
+    return tmp, w
 
 def reduce_bisect(arr, des_size, t1, thresh):  # works with N dimensions
     t2 = distN(arr.max(axis=0),arr.min(axis=0))
-    assert arr[coalesce(arr, t1)].shape[0] > des_size
+    assert arr[coalesce(arr, t1)[0]].shape[0] > des_size
     it = 0
     while t2 -t1 > thresh:
         it += 1
         t = 0.5*(t2 + t1)
-        s = arr[coalesce(arr, t)].shape[0]
-#        print("with t={} we get a size of {}".format(t,s))
+        s = arr[coalesce(arr, t)[0]].shape[0]
         if s == des_size:
             break
         if s > des_size:
             t1 = t
         else:
             t2 = t
-#    print("obtained in {} iterations".format(it))    
     return coalesce(arr, 0.5*(t2 + t1))
 
 def get_bins1D(arr, bins=5, range_=()):  
@@ -132,7 +138,7 @@ def get_bins2D(arrN2, bins=5, range_=[], flatten=False):
     elif type(bins) == np.ndarray:
         bins = [bins, bins]
     intbins = [type(b) == int for b in bins]
-    if range_ and type(range_) == list and range_[0] != list:
+    if range_ and type(range_) == list and type(range_[0]) != list:
         range_ = (range_, range_)
     if not range_:
         range_ = [[],[]]
@@ -176,19 +182,21 @@ def get_bins(arr, bins=5, range_=[], flatten=False):
     
 def reduce_bins(arr, bins, factor, t1, thresh):
     bins = get_bins(arr, bins=bins, flatten=True)
-    nbins = []
+    nbins, weights = [], []
     for b in bins:
         if len(b):
-            bidx = reduce_bisect(arr[b], round(b.size/factor), t1, thresh)
+            bidx, ws = reduce_bisect(arr[b], round(b.size/factor), t1, thresh)
             idx = b[bidx]
             nbins.append(idx)
+            weights.append(ws)
         else:
             nbins.append(np.array([], dtype="int"))
-    return nbins
+            weights.append(np.array([], dtype="int"))
+    return nbins, weights
 
 def subset(arr, bins, factor, t1, thresh):
     abins = get_bins(arr, bins=bins)
-    sbins = reduce_bins(arr, bins, factor, t1, thresh)
+    sbins, weights = reduce_bins(arr, bins, factor, t1, thresh)
     abc = np.array([i.size for i in abins])
     sbc = np.array([i.size for i in sbins])
     diff = abc - sbc*factor
@@ -199,23 +207,31 @@ def subset(arr, bins, factor, t1, thresh):
     todel = {}
     toadd = {}
     for n in omore:
-        if more[n] >= factor:
-            bidx = imore[n]
-            todel[bidx] = random.sample(sbins[bidx].tolist(), round(more[n]/factor))
+        if round(more[n]/factor) > 0:
+            pool = sbins[imore[n]].tolist()
+            topick = round(more[n]/factor)
+            if len(pool) == topick:
+                topick -= 1
+            todel[imore[n]] = random.sample(pool, topick)  
     for n in oless:
-        if less[n] >= factor:
-            bidx = iless[n]
-            toadd[bidx] = random.sample([i for i in abins[bidx] if i not in sbins[bidx]], round(less[n]/factor))
+        if round(less[n]/factor):
+            toadd[iless[n]] = random.sample([i for i in abins[iless[n]] if i not in sbins[iless[n]]], round(less[n]/factor))  # here
     for k,v in todel.items():
+        w_inc = sum([weights[k][n] for n,i in enumerate(sbins[k]) if i in v])  # tot weight increment
+        weights[k] = np.array([weights[k][n] for n,i in enumerate(sbins[k]) if i not in v])
+        weights[k] += w_inc/len(weights[k])
         sbins[k] = np.array([i for i in sbins[k] if i not in v])
     for k, v in toadd.items():
+        ws = np.ones(len(v))
+        weights[k] -= sum(ws)/len(weights[k])
+        weights[k] = np.append(weights[k], ws)
         sbins[k] = np.append(sbins[k], v)
-    return np.concatenate(sbins, axis=None).astype("int")
+    return np.concatenate(sbins, axis=None).astype("int"), np.concatenate(weights, axis=None)
 #
 
 def subset2D(arr, bins, factor, t1, thresh, concat=True):
     abins = get_bins(arr, bins=bins, flatten=True)
-    sbins = reduce_bins(arr, bins, factor, t1, thresh)
+    sbins, weights = reduce_bins(arr, bins, factor, t1, thresh)
     abc = np.array([i.size for i in abins])
     sbc = np.array([i.size for i in sbins])
     diff = abc - sbc*factor
@@ -226,18 +242,26 @@ def subset2D(arr, bins, factor, t1, thresh, concat=True):
     todel = {}
     toadd = {}
     for n in omore:
-        if more[n] >= factor:
-            bidx = imore[n]
-            todel[bidx] = random.sample(sbins[bidx].tolist(), round(more[n]/factor))
+        if round(more[n]/factor) > 0:
+            pool = sbins[imore[n]].tolist()
+            topick = round(more[n]/factor)
+            if len(pool) == topick:
+                topick -= 1
+            todel[imore[n]] = random.sample(pool, topick)  # here
     for n in oless:
-        if less[n] >= factor:
-            bidx = iless[n]
-            toadd[bidx] = random.sample([i for i in abins[bidx] if i not in sbins[bidx]], round(less[n]/factor))
+        if round(less[n]/factor):
+            toadd[iless[n]] = random.sample([i for i in abins[iless[n]] if i not in sbins[iless[n]]], round(less[n]/factor))  # here
     for k,v in todel.items():
+        w_inc = sum([weights[k][n] for n,i in enumerate(sbins[k]) if i in v])  # tot weight increment
+        weights[k] = np.array([weights[k][n] for n,i in enumerate(sbins[k]) if i not in v])
+        weights[k] += w_inc/len(weights[k])
         sbins[k] = np.array([i for i in sbins[k] if i not in v])
     for k, v in toadd.items():
+        ws = np.ones(len(v))
+        weights[k] -= sum(ws)/len(weights[k])
+        weights[k] = np.append(weights[k], ws)
         sbins[k] = np.append(sbins[k], v)
-    to_return = np.concatenate(sbins, axis=None).astype("int") if concat else sbins
+    to_return = (np.concatenate(sbins, axis=None).astype("int"), np.concatenate(weights, axis=None)) if concat else (sbins, weights)
     return to_return
 
 didx2flat = lambda idx, y_shape: idx[0]*y_shape + idx[1]
@@ -269,63 +293,79 @@ def neighbours(idx, *args, dim=2):
     return neighbours2D(idx, *args) if dim == 2 else neighbours1D(idx)
 
 def neighs_subset2D(arr, bins, factor, t1, thresh):
-    sbins = subset2D(arr, bins, factor, t1, thresh, concat=False)
-    sbc = np.array([i.size for i in sbins])
+    sbins, weights = subset2D(arr, bins, factor, t1, thresh, concat=False)
+    sbc = np.array([len(i) for i in sbins])
     abins = get_bins(arr, bins=bins, flatten=True)
-    abc = np.array([i.size for i in abins])
+    abc = np.array([len(i) for i in abins])
     diff = abc - sbc*factor
     
-    outliers = []
+    cnt = 0
+    split_points = []
+    for b in sbins:
+        cnt += len(b)
+        split_points.append(cnt)
+    sbins_concat = np.concatenate(sbins, axis=None)
+    sbins_idx = np.split(np.arange(len(sbins_concat)), split_points)
+    weights_concat = np.concatenate(weights, axis=None)
+    
+    cnt = 0
+    split_points = []
+    for b in abins:
+        cnt += len(b)
+        split_points.append(cnt)
+    abins_idx = np.split(np.arange(len(arr)), split_points)
+    
     todel = []
     done = []
+    deletions = []
     imax = len(sbins)
     for n in range(-factor + 1, 0):
         sels = np.where(diff == n)[0]
         for s in sels:
-            neighs = [i for i in neighbours2_fidx(s, bins) if i not in done and 0 <= i < imax] # todo
+            neighs = [i for i in neighbours2_fidx(s, bins) if i not in done and 0 <= i < imax] 
             if not neighs:
                 continue
             done.extend(neighs)
             nsbc = sbc[neighs].sum()
             nabc = abc[neighs].sum() 
             d = nsbc*factor - nabc
-            if d >= 0:
-                todel.extend(random.sample(np.concatenate([sbins[n] for n in neighs]).tolist(), round(d/factor))) 
-            else:
-                outliers.append(s)
-                
-    osbc = sbc[outliers].sum()
-    oabc = abc[outliers].sum() 
-    d = oabc - osbc*factor
-    if d >= 0:
-        todel.append(random.sample(np.concatenate([sbins[o] for o in outliers]).tolist(), round(d/factor))) 
-    
-    outliers = []
+            if round(d/factor) > 0:
+                pool = np.concatenate([sbins_idx[n] for n in neighs]).tolist()
+                topick = round(d/factor)
+                if len(pool) == topick:
+                    topick -= 1
+                sample = random.sample(pool, topick)
+                todel.extend(sample)
+                unsampled = [i for i in pool if i not in sample]
+                deletions.append((unsampled, sample))
     toadd = []
     done = []
+    additions = []
     for n in range(1, factor):
         sels = np.where(diff == n)[0]
         for s in sels:
-            neighs = [i for i in neighbours2_fidx(s, bins) if i not in done and 0 <= i < imax] # todo
+            neighs = [i for i in neighbours2_fidx(s, bins) if i not in done and 0 <= i < imax] 
             if not neighs:
                 continue
             done.extend(neighs)
             nsbc = sbc[neighs].sum()
             nabc = abc[neighs].sum() 
             d = nabc - nsbc*factor
-            if d >= 0:
-                toadd.extend(random.sample([i for i in np.concatenate([abins[n] for n in neighs]) if i not in np.concatenate([sbins[n] for n in neighs])],
-                                            round(d/factor))) 
-            else:
-                outliers.append(s)
-                
-    osbc = sbc[outliers].sum()
-    oabc = abc[outliers].sum() 
-    d = osbc*factor - oabc
-    if d >= 0:
-        todel.append(random.sample([i for i in np.concatenate([abins[o] for o in outliers]) if i not in np.concatenate(*sbins[outliers])], round(d/factor))) 
+            if round(d/factor) > 0:
+                add_to = np.concatenate([sbins_idx[n] for n in neighs])
+                pool = [i for i in np.concatenate([abins_idx[n] for n in neighs]) if i not in add_to]
+                sample = random.sample(pool, round(d/factor))
+                toadd.extend(sample)  
+                additions.append((add_to, sample))
     
-    sbst = np.array([i for i in np.concatenate(sbins, axis=None).astype("int") if i not in todel])
+    indexes = [i for i in range(len(sbins_concat)) if i not in todel]
+    sbst = sbins_concat.copy()[indexes]
     sbst = np.append(sbst, toadd)
+    for del_ in deletions:
+        weights_concat[del_[0]] += weights_concat[del_[1]].sum()/len(weights_concat[del_[0]])
+    for add in additions:
+        weights_concat[add[0]] -= len(add[1])/len(weights_concat[add[0]])
+    nweights = weights_concat[indexes]
+    nweights = np.append(nweights, np.ones(len(toadd)))
     sbst = sbst.astype("int")
-    return sbst
+    return sbst, nweights
