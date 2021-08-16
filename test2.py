@@ -40,7 +40,7 @@ for iso_f, emb_f in zip(iso_fs, emb_fs):
         for factor in [3,4,5]:
             t1 = 0.0001
             thresh = 0.001
-            itr = 250
+            itr = 3
             for arr, arr_name in zip([isos, embs], ["iso", "emb"]):
                 deltaN = np.zeros([itr,2])
                 deltaS = np.zeros([itr,2])
@@ -57,67 +57,69 @@ for iso_f, emb_f in zip(iso_fs, emb_fs):
                 best_dN = deltaN[idx]
                 sbst = sbst_lst[idx]
                 ws =ws_lst[idx]
-                jsfp = os.path.join(sbstfol, "{}_{}_weighted_{}.json".format(system, arr_name, factor))
+                jsfp = os.path.join(sbstfol, "{}_{}_todel_{}.json".format(system, arr_name, factor))
                 with open(jsfp, "w") as  f:
+                    print(system, arr_name, factor, ws.sum())
                     js.dump([sbst.tolist(), ws.tolist()], f)
     else:
         fol, fname = os.path.split(iso_f)
         for factor in [3,4,5]:
             for arr, arr_name in zip([isos, embs], ["iso", "emb"]):
-                jsfp = os.path.join(sbstfol, "{}_{}_weighted_{}.json".format(system, arr_name, factor))
+                jsfp = os.path.join(sbstfol, "{}_{}_todel_{}.json".format(system, arr_name, factor))
                 with open(jsfp, "r") as  f:
                     sbst, ws = np.array(js.load(f))
                 sbst = sbst.astype("int")
-                plotbins = 10
-                fig = plt.figure(figsize=(20, 10), dpi=150)
-                ax = fig.add_subplot(221)
-                _, bins, _t = ax.hist(arr[:,0], bins=plotbins, alpha=1, density=True,
-                                      color="red", histtype="step", linewidth=5, label="full")
-                ax.hist(arr[:,0][sbst], weights=ws, bins=bins, alpha=0.5, density=True,
-                        color="green", histtype="step", linewidth=5, linestyle="-", label="subset")
-                ax.set_xlabel(r"$\varepsilon$")
-                ax.set_ylabel("occurrence")
-                ax.legend()
-                ax.set_title(r"$\Delta <\varepsilon^{{{lbl}}}>$ = {d1:.5f}   $\Delta <f^{{{lbl}}}>$ = {d2:.5f}".format(**{
-                        "d1": np.average(arr[:,0], weights=arr[:,1]) - np.average(arr[:,0][sbst], weights=arr[:,1][sbst]*ws),
-                        "d2": np.average(arr[:,1]) - np.average(arr[:,1][sbst],  weights=ws),
-                        "lbl": arr_name}))
-                ax2 = fig.add_subplot(222)
-                _, bins, _t = ax2.hist(arr[:,1], bins=plotbins, alpha=1, density=True,
-                                       color="red", histtype="step", linewidth=5, label="full")
-                ax2.hist(arr[:,1][sbst], weights=ws, bins=bins, alpha=0.5, density=True,
-                         color="green", histtype="step", linewidth=5, linestyle="-", label="subset")
-                ax2.set_xlabel("$f$")
-                ax2.set_ylabel("occurrence")
-                ax2.legend()
-                other_arr = embs if arr_name == "iso" else isos
-                other_name = "emb" if arr_name == "iso" else "iso"
-                ax2.set_title(r"$\Delta <\varepsilon^{{{lbl}}}>$ = {d1:.5f}   $\Delta <f^{{{lbl}}}>$ = {d2:.5f}".format(**{
-                        "d1": np.average(other_arr[:,0], weights=other_arr[:,1]) - np.average(other_arr[:,0][sbst], weights=other_arr[:,1][sbst]*ws),
-                        "d2": np.average(other_arr[:,1]) - np.average(other_arr[:,1][sbst], weights=ws),
-                        "lbl": other_name}))
-                ax3 = fig.add_subplot(223)
-                Z3, xedges3, yedges3 = np.histogram2d(*arr.T, bins=10, density=True)
-#                h3 = ax3.hist2d(*arr.T, bins=10, alpha=0.5, density=True)
-                h3 = ax3.pcolormesh(xedges3, yedges3, Z3)
-                ax3.set_xlabel(r"$\varepsilon$")
-                cb = fig.colorbar(h3, ax=ax3)
-#                cb = fig.colorbar(h3[3], ax=ax3)
-                density = cb.get_ticks()
-                ax3.set_ylabel(r"$f$")
-                ax3.set_title("full")
-                ax4 = fig.add_subplot(224)
-#                h4 = ax4.hist2d(*arr[sbst].T, weights=ws, bins=10, alpha=0.5, density=True)
-                Z4, xedges4, yedges4 = np.histogram2d(*arr[sbst].T, weights=ws, bins=10, density=True)
-                h4 = ax4.pcolormesh(xedges4, yedges4, Z4, vmin=density.min(), vmax=density.max())
-                ax4.set_xlabel(r"$\varepsilon$")
-                fig.colorbar(h4, ax=ax4)
-#                fig.colorbar(h4[3], ax=ax4)
-                ax4.set_ylabel(r"$f$")
-                ax4.set_title("subset")
-                fig.suptitle("{}, factor = {}".format(arr_name, factor))
-                fig.subplots_adjust(left=0.05, right=0.99, top=0.9, bottom=0.075, wspace=0.25, hspace=0.3)
-                fig.savefig(jsfp[:-4]+"png")
+                print(system, factor, ws.sum())
+#                plotbins = 10
+#                fig = plt.figure(figsize=(20, 10), dpi=150)
+#                ax = fig.add_subplot(221)
+#                _, bins, _t = ax.hist(arr[:,0], bins=plotbins, alpha=1, density=True,
+#                                      color="red", histtype="step", linewidth=5, label="full")
+#                ax.hist(arr[:,0][sbst], weights=ws, bins=bins, alpha=0.5, density=True,
+#                        color="green", histtype="step", linewidth=5, linestyle="-", label="subset")
+#                ax.set_xlabel(r"$\varepsilon$")
+#                ax.set_ylabel("occurrence")
+#                ax.legend()
+#                ax.set_title(r"$\Delta <\varepsilon^{{{lbl}}}>$ = {d1:.5f}   $\Delta <f^{{{lbl}}}>$ = {d2:.5f}".format(**{
+#                        "d1": np.average(arr[:,0], weights=arr[:,1]) - np.average(arr[:,0][sbst], weights=arr[:,1][sbst]*ws),
+#                        "d2": np.average(arr[:,1]) - np.average(arr[:,1][sbst],  weights=ws),
+#                        "lbl": arr_name}))
+#                ax2 = fig.add_subplot(222)
+#                _, bins, _t = ax2.hist(arr[:,1], bins=plotbins, alpha=1, density=True,
+#                                       color="red", histtype="step", linewidth=5, label="full")
+#                ax2.hist(arr[:,1][sbst], weights=ws, bins=bins, alpha=0.5, density=True,
+#                         color="green", histtype="step", linewidth=5, linestyle="-", label="subset")
+#                ax2.set_xlabel("$f$")
+#                ax2.set_ylabel("occurrence")
+#                ax2.legend()
+#                other_arr = embs if arr_name == "iso" else isos
+#                other_name = "emb" if arr_name == "iso" else "iso"
+#                ax2.set_title(r"$\Delta <\varepsilon^{{{lbl}}}>$ = {d1:.5f}   $\Delta <f^{{{lbl}}}>$ = {d2:.5f}".format(**{
+#                        "d1": np.average(other_arr[:,0], weights=other_arr[:,1]) - np.average(other_arr[:,0][sbst], weights=other_arr[:,1][sbst]*ws),
+#                        "d2": np.average(other_arr[:,1]) - np.average(other_arr[:,1][sbst], weights=ws),
+#                        "lbl": other_name}))
+#                ax3 = fig.add_subplot(223)
+#                Z3, xedges3, yedges3 = np.histogram2d(*arr.T, bins=10, density=True)
+##                h3 = ax3.hist2d(*arr.T, bins=10, alpha=0.5, density=True)
+#                h3 = ax3.pcolormesh(xedges3, yedges3, Z3)
+#                ax3.set_xlabel(r"$\varepsilon$")
+#                cb = fig.colorbar(h3, ax=ax3)
+##                cb = fig.colorbar(h3[3], ax=ax3)
+#                density = cb.get_ticks()
+#                ax3.set_ylabel(r"$f$")
+#                ax3.set_title("full")
+#                ax4 = fig.add_subplot(224)
+##                h4 = ax4.hist2d(*arr[sbst].T, weights=ws, bins=10, alpha=0.5, density=True)
+#                Z4, xedges4, yedges4 = np.histogram2d(*arr[sbst].T, weights=ws, bins=10, density=True)
+#                h4 = ax4.pcolormesh(xedges4, yedges4, Z4, vmin=density.min(), vmax=density.max())
+#                ax4.set_xlabel(r"$\varepsilon$")
+#                fig.colorbar(h4, ax=ax4)
+##                fig.colorbar(h4[3], ax=ax4)
+#                ax4.set_ylabel(r"$f$")
+#                ax4.set_title("subset")
+#                fig.suptitle("{}, factor = {}".format(arr_name, factor))
+#                fig.subplots_adjust(left=0.05, right=0.99, top=0.9, bottom=0.075, wspace=0.25, hspace=0.3)
+#                fig.savefig(jsfp[:-4]+"png")
 
 #fig2 = plt.figure(figsize=(20, 10), dpi=150)
 #ax = fig2.add_subplot(111)

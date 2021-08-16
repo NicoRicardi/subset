@@ -301,16 +301,17 @@ def neighs_subset2D(arr, bins, factor, t1, thresh):
     
     cnt = 0
     split_points = []
-    for b in sbins:
+    for b in sbins[:-1]:
         cnt += len(b)
         split_points.append(cnt)
     sbins_concat = np.concatenate(sbins, axis=None)
     sbins_idx = np.split(np.arange(len(sbins_concat)), split_points)
     weights_concat = np.concatenate(weights, axis=None)
+    assert weights_concat.sum() == float(len(arr))  # comment out later
     
     cnt = 0
     split_points = []
-    for b in abins:
+    for b in abins[:-1]:
         cnt += len(b)
         split_points.append(cnt)
     abins_idx = np.split(np.arange(len(arr)), split_points)
@@ -352,8 +353,8 @@ def neighs_subset2D(arr, bins, factor, t1, thresh):
             nabc = abc[neighs].sum() 
             d = nabc - nsbc*factor
             if round(d/factor) > 0:
-                add_to = np.concatenate([sbins_idx[n] for n in neighs])
-                pool = [i for i in np.concatenate([abins_idx[n] for n in neighs]) if i not in add_to]
+                add_to = [i for i in np.concatenate([sbins_idx[n] for n in neighs]) if i not in todel]
+                pool = [i for i in np.concatenate([abins[n] for n in neighs]) if i not in add_to]
                 sample = random.sample(pool, round(d/factor))
                 toadd.extend(sample)  
                 additions.append((add_to, sample))
